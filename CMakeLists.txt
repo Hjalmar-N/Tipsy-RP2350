@@ -24,5 +24,5 @@ target_link_libraries(tipsy_rp2350
 pico_enable_stdio_usb(tipsy_rp2350 1)
 pico_enable_stdio_uart(tipsy_rp2350 0)
 
-# Create UF2 output
-pico_add_extra_outputs(tipsy_rp2350)
+# Create UF2 output (minimal - avoids picotool dependency)
+pico_add_uf2_output(tipsy_rp2350)
