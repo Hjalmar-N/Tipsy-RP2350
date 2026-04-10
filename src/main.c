@@ -26,6 +26,7 @@
 // ST7796S commands (from Waveshare LCD_3in5.h)
 #define ST7796S_SWRESET 0x01
 #define ST7796S_SLPOUT  0x11
+#define ST7796S_INVOFF  0x20
 #define ST7796S_DISPON  0x29
 #define ST7796S_CASET   0x2A
 #define ST7796S_RASET   0x2B
@@ -157,6 +158,8 @@ static void display_init(void) {
     
     lcd_write_command(ST7796S_SLPOUT);
     sleep_ms(120);
+    
+    lcd_write_command(ST7796S_INVOFF);
     
     lcd_write_command(ST7796S_DISPON);
     sleep_ms(20);
