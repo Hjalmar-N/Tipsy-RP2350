@@ -26,7 +26,7 @@
 // ST7796S commands (from Waveshare LCD_3in5.h)
 #define ST7796S_SWRESET 0x01
 #define ST7796S_SLPOUT  0x11
-#define ST7796S_INVOFF  0x20
+#define ST7796S_INVON   0x21
 #define ST7796S_DISPON  0x29
 #define ST7796S_CASET   0x2A
 #define ST7796S_RASET   0x2B
@@ -159,7 +159,7 @@ static void display_init(void) {
     lcd_write_command(ST7796S_SLPOUT);
     sleep_ms(120);
     
-    lcd_write_command(ST7796S_INVOFF);
+    lcd_write_command(ST7796S_INVON);
     
     lcd_write_command(ST7796S_DISPON);
     sleep_ms(20);
@@ -183,10 +183,10 @@ static void display_fill_screen(uint16_t color) {
     
     lcd_write_command(ST7796S_RAMWR);
     
-    // Fill screen with color (RGB565 format, big-endian)
+    // Fill screen with color (RGB565 format, high byte first per Waveshare)
     uint8_t color_buf[2];
-    color_buf[0] = color >> 8;
-    color_buf[1] = color & 0xFF;
+    color_buf[0] = color >> 8;          // High byte first
+    color_buf[1] = color & 0xFF;        // Low byte second
     
     gpio_put(LCD_DC_PIN, 1);  // Data mode
     gpio_put(LCD_CS_PIN, 0);  // Select
