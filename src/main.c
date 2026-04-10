@@ -37,11 +37,16 @@
 #define LCD_WIDTH  320
 #define LCD_HEIGHT 480
 
-// RGB565 colors for diagnostic test
-#define COLOR_RED   0xF800
-#define COLOR_GREEN 0x07E0
-#define COLOR_BLUE  0x001F
-#define COLOR_WHITE 0xFFFF
+// RGB565 colors
+#define COLOR_BLACK     0x0000
+#define COLOR_DARKGRAY  0x39E7
+#define COLOR_LIGHTGRAY 0xBDF7
+#define COLOR_RED       0xF800
+#define COLOR_GREEN     0x07E0
+#define COLOR_BLUE      0x001F
+#define COLOR_ORANGE    0xFD20
+#define COLOR_PURPLE    0x780F
+#define COLOR_CYAN      0x07FF
 
 static void lcd_write_command(uint8_t cmd) {
     gpio_put(LCD_DC_PIN, 0);  // Command mode
@@ -167,23 +172,30 @@ static void display_init(void) {
     printf("Display initialized (ST7796S 320x480)\n");
 }
 
-static void display_fill_screen(uint16_t color) {
-    // Set window to full screen
+static void display_set_window(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1) {
     lcd_write_command(ST7796S_CASET);
-    lcd_write_data(0x00);
-    lcd_write_data(0x00);
-    lcd_write_data((LCD_WIDTH - 1) >> 8);
-    lcd_write_data((LCD_WIDTH - 1) & 0xFF);
+    lcd_write_data(x0 >> 8);
+    lcd_write_data(x0 & 0xFF);
+    lcd_write_data(x1 >> 8);
+    lcd_write_data(x1 & 0xFF);
     
     lcd_write_command(ST7796S_RASET);
-    lcd_write_data(0x00);
-    lcd_write_data(0x00);
-    lcd_write_data((LCD_HEIGHT - 1) >> 8);
-    lcd_write_data((LCD_HEIGHT - 1) & 0xFF);
+    lcd_write_data(y0 >> 8);
+    lcd_write_data(y0 & 0xFF);
+    lcd_write_data(y1 >> 8);
+    lcd_write_data(y1 & 0xFF);
     
     lcd_write_command(ST7796S_RAMWR);
+}
+
+static void display_fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color) {
+    if (x >= LCD_WIDTH || y >= LCD_HEIGHT) return;
+    if (x + w > LCD_WIDTH) w = LCD_WIDTH - x;
+    if (y + h > LCD_HEIGHT) h = LCD_HEIGHT - y;
     
-    // Fill screen with color (RGB565 format, high byte first per Waveshare)
+    display_set_window(x, y, x + w - 1, y + h - 1);
+    
+    // Fill with color (RGB565 format, high byte first per Waveshare)
     uint8_t color_buf[2];
     color_buf[0] = color >> 8;          // High byte first
     color_buf[1] = color & 0xFF;        // Low byte second
@@ -191,13 +203,37 @@ static void display_fill_screen(uint16_t color) {
     gpio_put(LCD_DC_PIN, 1);  // Data mode
     gpio_put(LCD_CS_PIN, 0);  // Select
     
-    for (uint32_t i = 0; i < LCD_WIDTH * LCD_HEIGHT; i++) {
+    for (uint32_t i = 0; i < w * h; i++) {
         spi_write_blocking(spi0, color_buf, 2);
     }
     
     gpio_put(LCD_CS_PIN, 1);  // Deselect
+}
+
+static void display_fill_screen(uint16_t color) {
+    display_fill_rect(0, 0, LCD_WIDTH, LCD_HEIGHT, color);
+}
+
+static void display_draw_static_layout(void) {
+    printf("Drawing static layout...\n");
     
-    printf("Screen filled with color 0x%04X\n", color);
+    // Background
+    display_fill_screen(COLOR_DARKGRAY);
+    
+    // Header bar (top 60px)
+    display_fill_rect(0, 0, LCD_WIDTH, 60, COLOR_LIGHTGRAY);
+    
+    // Three large drink button areas (simplified layout)
+    // Button 1: Red drink
+    display_fill_rect(20, 80, 280, 100, COLOR_RED);
+    
+    // Button 2: Green drink
+    display_fill_rect(20, 200, 280, 100, COLOR_GREEN);
+    
+    // Button 3: Blue drink
+    display_fill_rect(20, 320, 280, 100, COLOR_BLUE);
+    
+    printf("Static layout complete\n");
 }
 
 int main() {
@@ -219,25 +255,8 @@ int main() {
     printf("Initializing display...\n");
     display_init();
     
-    // Diagnostic color sequence test
-    printf("Testing RED (0xF800)...\n");
-    display_fill_screen(COLOR_RED);
-    sleep_ms(2000);
-    
-    printf("Testing GREEN (0x07E0)...\n");
-    display_fill_screen(COLOR_GREEN);
-    sleep_ms(2000);
-    
-    printf("Testing BLUE (0x001F)...\n");
-    display_fill_screen(COLOR_BLUE);
-    sleep_ms(2000);
-    
-    printf("Testing WHITE (0xFFFF)...\n");
-    display_fill_screen(COLOR_WHITE);
-    sleep_ms(2000);
-    
-    printf("Display color diagnostic complete\n");
-    printf("Please report which colors appeared in order\n");
+    // Draw static layout
+    display_draw_static_layout();
     
     uint32_t count = 0;
     
