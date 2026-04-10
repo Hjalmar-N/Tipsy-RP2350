@@ -18,6 +18,7 @@ add_executable(tipsy_rp2350
 # Link libraries
 target_link_libraries(tipsy_rp2350
     pico_stdlib
+    hardware_spi
 )
 
 # Enable USB output, disable UART
