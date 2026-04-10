@@ -322,6 +322,22 @@ int main() {
   printf("If you can read this, USB serial works.\r\n");
   fflush(stdout);
 
+  // Test display init without breaking serial
+  printf("Before display_init...\r\n");
+  fflush(stdout);
+  
+  display_init();
+  
+  printf("After display_init - serial still works!\r\n");
+  fflush(stdout);
+  
+  // Simple visual test: fill screen with dark gray
+  printf("Filling screen with dark gray...\r\n");
+  fflush(stdout);
+  display_fill_screen(COLOR_DARKGRAY);
+  printf("Screen filled - display is alive\r\n");
+  fflush(stdout);
+
   while (true) {
     gpio_put(LED_PIN, 1);
     printf("alive\r\n");
