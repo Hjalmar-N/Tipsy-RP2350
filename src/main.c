@@ -10,6 +10,7 @@
 
 #include "hardware/gpio.h"
 #include "hardware/spi.h"
+#include "hardware/i2c.h"
 #include "pico/stdlib.h"
 #include <stdio.h>
 
@@ -37,6 +38,20 @@
 
 #define LCD_WIDTH 320
 #define LCD_HEIGHT 480
+
+// FT6336U Touch pins (verified from Waveshare DEV_Config.h)
+#define TOUCH_SDA_PIN 34
+#define TOUCH_SCL_PIN 35
+#define TOUCH_RST_PIN 24
+#define TOUCH_INT_PIN 25
+
+// FT6336U I2C address and registers (from Waveshare FT6336U.h)
+#define FT6336U_ADDR 0x38
+#define FT6336U_TD_STATUS 0x02
+#define FT6336U_P1_XH 0x03
+#define FT6336U_P1_XL 0x04
+#define FT6336U_P1_YH 0x05
+#define FT6336U_P1_YL 0x06
 
 // RGB565 colors
 #define COLOR_BLACK 0x0000
@@ -222,6 +237,51 @@ static void display_fill_screen(uint16_t color) {
   display_fill_rect(0, 0, LCD_WIDTH, LCD_HEIGHT, color);
 }
 
+static void touch_init(void) {
+  // Initialize I2C0 at 100kHz (verified from Waveshare DEV_Config.c)
+  i2c_init(i2c0, 100000);
+  gpio_set_function(TOUCH_SDA_PIN, GPIO_FUNC_I2C);
+  gpio_set_function(TOUCH_SCL_PIN, GPIO_FUNC_I2C);
+  gpio_pull_up(TOUCH_SDA_PIN);
+  gpio_pull_up(TOUCH_SCL_PIN);
+
+  // Initialize reset pin
+  gpio_init(TOUCH_RST_PIN);
+  gpio_set_dir(TOUCH_RST_PIN, GPIO_OUT);
+
+  // Hardware reset (from Waveshare FT6336U_Reset)
+  gpio_put(TOUCH_RST_PIN, 0);
+  sleep_ms(100);
+  gpio_put(TOUCH_RST_PIN, 1);
+  sleep_ms(100);
+
+  printf("Touch initialized (FT6336U)\n");
+}
+
+static bool touch_read(uint16_t *x, uint16_t *y) {
+  uint8_t data[4];
+  uint8_t reg = FT6336U_TD_STATUS;
+
+  // Read touch status
+  i2c_write_blocking(i2c0, FT6336U_ADDR, &reg, 1, true);
+  i2c_read_blocking(i2c0, FT6336U_ADDR, data, 1, false);
+
+  uint8_t touch_points = data[0] & 0x0F;
+  if (touch_points == 0) {
+    return false; // No touch
+  }
+
+  // Read X coordinate (P1_XH and P1_XL)
+  reg = FT6336U_P1_XH;
+  i2c_write_blocking(i2c0, FT6336U_ADDR, &reg, 1, true);
+  i2c_read_blocking(i2c0, FT6336U_ADDR, data, 4, false);
+
+  *x = ((data[0] & 0x0F) << 8) | data[1];
+  *y = ((data[2] & 0x0F) << 8) | data[3];
+
+  return true;
+}
+
 static void display_draw_static_layout(void) {
   printf("Drawing static layout...\n");
 
@@ -266,7 +326,13 @@ int main() {
   // Draw static layout
   display_draw_static_layout();
 
+  // Initialize touch
+  printf("Initializing touch...\n");
+  touch_init();
+
   uint32_t count = 0;
+  uint16_t touch_x = 0, touch_y = 0;
+  bool last_touch_state = false;
 
   while (true) {
     // Toggle LED
@@ -274,6 +340,17 @@ int main() {
     sleep_ms(250);
     gpio_put(LED_PIN, 0);
     sleep_ms(250);
+
+    // Poll touch status
+    bool touch_detected = touch_read(&touch_x, &touch_y);
+
+    // Log touch events (only on state change to reduce spam)
+    if (touch_detected && !last_touch_state) {
+      printf("Touch DOWN at (%u, %u)\n", touch_x, touch_y);
+    } else if (!touch_detected && last_touch_state) {
+      printf("Touch UP\n");
+    }
+    last_touch_state = touch_detected;
 
     // Heartbeat every second
     if (count % 2 == 0) {
