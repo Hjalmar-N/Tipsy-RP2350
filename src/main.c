@@ -1,19 +1,21 @@
 /**
- * Tipsy-RP2350 - Minimal bring-up
+ * Tipsy-RP2350 - USB serial isolation test
  *
- * First verification step:
- * - USB serial heartbeat output
- * - Built-in LED blink as backup visual confirmation
+ * Goal:
+ * - Verify USB serial output independently of display/touch
+ * - Keep LED blink as visual confirmation
  *
- * No board-specific hardware assumptions yet.
+ * Display/touch code is left in the file but not used from main().
  */
 
-#include "hardware/gpio.h"
-#include "hardware/spi.h"
-#include "hardware/i2c.h"
-#include "pico/stdlib.h"
+#include <stdbool.h>
 #include <stdio.h>
 
+#include "hardware/gpio.h"
+#include "hardware/i2c.h"
+#include "hardware/spi.h"
+#include "pico/stdio_usb.h"
+#include "pico/stdlib.h"
 
 #define LED_PIN PICO_DEFAULT_LED_PIN
 
@@ -185,7 +187,7 @@ static void display_init(void) {
   lcd_write_command(ST7796S_DISPON);
   sleep_ms(20);
 
-  printf("Display initialized (ST7796S 320x480)\n");
+  printf("Display initialized (ST7796S 320x480)\r\n");
 }
 
 static void display_set_window(uint16_t x0, uint16_t y0, uint16_t x1,
@@ -218,19 +220,18 @@ static void display_fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
 
   display_set_window(x, y, x + w - 1, y + h - 1);
 
-  // Fill with color (RGB565 format, high byte first per Waveshare)
   uint8_t color_buf[2];
-  color_buf[0] = color >> 8;   // High byte first
-  color_buf[1] = color & 0xFF; // Low byte second
+  color_buf[0] = color >> 8;
+  color_buf[1] = color & 0xFF;
 
-  gpio_put(LCD_DC_PIN, 1); // Data mode
-  gpio_put(LCD_CS_PIN, 0); // Select
+  gpio_put(LCD_DC_PIN, 1);
+  gpio_put(LCD_CS_PIN, 0);
 
   for (uint32_t i = 0; i < w * h; i++) {
     spi_write_blocking(spi0, color_buf, 2);
   }
 
-  gpio_put(LCD_CS_PIN, 1); // Deselect
+  gpio_put(LCD_CS_PIN, 1);
 }
 
 static void display_fill_screen(uint16_t color) {
@@ -238,43 +239,48 @@ static void display_fill_screen(uint16_t color) {
 }
 
 static void touch_init(void) {
-  // Initialize I2C0 at 100kHz (verified from Waveshare DEV_Config.c)
   i2c_init(i2c0, 100000);
   gpio_set_function(TOUCH_SDA_PIN, GPIO_FUNC_I2C);
   gpio_set_function(TOUCH_SCL_PIN, GPIO_FUNC_I2C);
   gpio_pull_up(TOUCH_SDA_PIN);
   gpio_pull_up(TOUCH_SCL_PIN);
 
-  // Initialize reset pin
   gpio_init(TOUCH_RST_PIN);
   gpio_set_dir(TOUCH_RST_PIN, GPIO_OUT);
 
-  // Hardware reset (from Waveshare FT6336U_Reset)
   gpio_put(TOUCH_RST_PIN, 0);
   sleep_ms(100);
   gpio_put(TOUCH_RST_PIN, 1);
   sleep_ms(100);
 
-  printf("Touch initialized (FT6336U)\n");
+  printf("Touch initialized (FT6336U)\r\n");
 }
 
 static bool touch_read(uint16_t *x, uint16_t *y) {
   uint8_t data[4];
   uint8_t reg = FT6336U_TD_STATUS;
 
-  // Read touch status
-  i2c_write_blocking(i2c0, FT6336U_ADDR, &reg, 1, true);
-  i2c_read_blocking(i2c0, FT6336U_ADDR, data, 1, false);
+  int written = i2c_write_blocking(i2c0, FT6336U_ADDR, &reg, 1, true);
+  if (written < 0)
+    return false;
+
+  int read = i2c_read_blocking(i2c0, FT6336U_ADDR, data, 1, false);
+  if (read < 0)
+    return false;
 
   uint8_t touch_points = data[0] & 0x0F;
   if (touch_points == 0) {
-    return false; // No touch
+    return false;
   }
 
-  // Read X coordinate (P1_XH and P1_XL)
   reg = FT6336U_P1_XH;
-  i2c_write_blocking(i2c0, FT6336U_ADDR, &reg, 1, true);
-  i2c_read_blocking(i2c0, FT6336U_ADDR, data, 4, false);
+  written = i2c_write_blocking(i2c0, FT6336U_ADDR, &reg, 1, true);
+  if (written < 0)
+    return false;
+
+  read = i2c_read_blocking(i2c0, FT6336U_ADDR, data, 4, false);
+  if (read < 0)
+    return false;
 
   *x = ((data[0] & 0x0F) << 8) | data[1];
   *y = ((data[2] & 0x0F) << 8) | data[3];
@@ -283,81 +289,49 @@ static bool touch_read(uint16_t *x, uint16_t *y) {
 }
 
 static void display_draw_static_layout(void) {
-  printf("Drawing static layout...\n");
+  printf("Drawing static layout...\r\n");
 
-  // Background
   display_fill_screen(COLOR_DARKGRAY);
-
-  // Header bar (top 60px)
   display_fill_rect(0, 0, LCD_WIDTH, 60, COLOR_LIGHTGRAY);
-
-  // Three large drink button areas (simplified layout)
-  // Button 1: Red drink
   display_fill_rect(20, 80, 280, 100, COLOR_RED);
-
-  // Button 2: Green drink
   display_fill_rect(20, 200, 280, 100, COLOR_GREEN);
-
-  // Button 3: Blue drink
   display_fill_rect(20, 320, 280, 100, COLOR_BLUE);
 
-  printf("Static layout complete\n");
+  printf("Static layout complete\r\n");
 }
 
 int main() {
-  // Initialize stdio for USB serial output
   stdio_init_all();
+  stdio_usb_init();
 
-  // Initialize LED pin
   gpio_init(LED_PIN);
   gpio_set_dir(LED_PIN, GPIO_OUT);
 
-  // Wait for USB serial connection (optional, helps with early messages)
-  sleep_ms(2000);
+  // Give USB time to enumerate
+  sleep_ms(1000);
 
-  printf("Tipsy-RP2350 boot\n");
-  printf("Board: Waveshare RP2350-Touch-LCD-3.5\n");
-  printf("SDK: Pico SDK 2.x\n");
+  // Wait a short time for terminal connection, but do not block forever
+  for (int i = 0; i < 50; i++) {
+    if (stdio_usb_connected()) {
+      break;
+    }
+    sleep_ms(100);
+  }
 
-  // Initialize and test display
-  printf("Initializing display...\n");
-  display_init();
-
-  // Draw static layout
-  display_draw_static_layout();
-
-  // Initialize touch
-  printf("Initializing touch...\n");
-  touch_init();
-
-  uint32_t count = 0;
-  uint16_t touch_x = 0, touch_y = 0;
-  bool last_touch_state = false;
+  printf("\r\nUSB serial isolation test start\r\n");
+  printf("If you can read this, USB serial works.\r\n");
+  fflush(stdout);
 
   while (true) {
-    // Toggle LED
     gpio_put(LED_PIN, 1);
-    sleep_ms(250);
+    printf("alive\r\n");
+    fflush(stdout);
+    sleep_ms(500);
+
     gpio_put(LED_PIN, 0);
-    sleep_ms(250);
-
-    // Poll touch status
-    bool touch_detected = touch_read(&touch_x, &touch_y);
-
-    // Log touch events (only on state change to reduce spam)
-    if (touch_detected && !last_touch_state) {
-      printf("Touch DOWN at (%u, %u)\n", touch_x, touch_y);
-    } else if (!touch_detected && last_touch_state) {
-      printf("Touch UP\n");
-    }
-    last_touch_state = touch_detected;
-
-    // Heartbeat every second
-    if (count % 2 == 0) {
-      printf("Heartbeat: %lu\n", count / 2);
-    }
-
-    count++;
+    printf("alive\r\n");
+    fflush(stdout);
+    sleep_ms(500);
   }
 
   return 0;
