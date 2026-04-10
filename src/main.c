@@ -36,8 +36,11 @@
 #define LCD_WIDTH  320
 #define LCD_HEIGHT 480
 
-// RGB565 color
+// RGB565 colors for diagnostic test
 #define COLOR_RED   0xF800
+#define COLOR_GREEN 0x07E0
+#define COLOR_BLUE  0x001F
+#define COLOR_WHITE 0xFFFF
 
 static void lcd_write_command(uint8_t cmd) {
     gpio_put(LCD_DC_PIN, 0);  // Command mode
@@ -212,8 +215,26 @@ int main() {
     // Initialize and test display
     printf("Initializing display...\n");
     display_init();
+    
+    // Diagnostic color sequence test
+    printf("Testing RED (0xF800)...\n");
     display_fill_screen(COLOR_RED);
-    printf("Display bring-up complete\n");
+    sleep_ms(2000);
+    
+    printf("Testing GREEN (0x07E0)...\n");
+    display_fill_screen(COLOR_GREEN);
+    sleep_ms(2000);
+    
+    printf("Testing BLUE (0x001F)...\n");
+    display_fill_screen(COLOR_BLUE);
+    sleep_ms(2000);
+    
+    printf("Testing WHITE (0xFFFF)...\n");
+    display_fill_screen(COLOR_WHITE);
+    sleep_ms(2000);
+    
+    printf("Display color diagnostic complete\n");
+    printf("Please report which colors appeared in order\n");
     
     uint32_t count = 0;
     
