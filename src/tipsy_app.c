@@ -126,6 +126,56 @@ static bool shot_is_available(IngredientId ingredient_id) {
   return ingredient_is_available(ingredient_id);
 }
 
+static uint16_t normalize_main_spirit_ml(uint16_t ml) {
+  if (ml <= 50) return 40;
+  if (ml <= 70) return 60;
+  return 80;
+}
+
+static uint32_t calculate_pour_time_ms(uint16_t ml) {
+  return (uint32_t)ml * default_ms_per_ml;
+}
+
+static const Drink *tipsy_get_selected_drink(const TipsyAppState *app_state) {
+  if (app_state == NULL) {
+    return NULL;
+  }
+  if (app_state->selected_drink_index < 0 ||
+      app_state->selected_drink_index >= (int8_t)NUM_DRINKS) {
+    return NULL;
+  }
+  return &drinks[(size_t)app_state->selected_drink_index];
+}
+
+const char *tipsy_app_get_selected_label(const TipsyAppState *app_state) {
+  const Drink *drink = tipsy_get_selected_drink(app_state);
+
+  if (app_state == NULL) {
+    return "NONE";
+  }
+  if (app_state->selected_is_shot) {
+    return tipsy_get_shot_label(app_state->selected_shot);
+  }
+  if (drink != NULL) {
+    return drink->name;
+  }
+  return "NONE";
+}
+
+uint16_t tipsy_app_get_selected_main_ml(const TipsyAppState *app_state) {
+  if (app_state == NULL) {
+    return 0;
+  }
+  return app_state->selected_main_ml;
+}
+
+uint16_t tipsy_app_get_pour_progress_px(const TipsyAppState *app_state) {
+  if (app_state == NULL) {
+    return 0;
+  }
+  return app_state->last_pour_progress_px;
+}
+
 void tipsy_app_init(TipsyAppState *app_state) {
   if (app_state == NULL) {
     return;
@@ -134,10 +184,10 @@ void tipsy_app_init(TipsyAppState *app_state) {
   memset(app_state, 0, sizeof(*app_state));
   app_state->current_screen = UI_REFACTOR_SCREEN_BOOT;
   app_state->selected_settings_pump = PUMP_ID_1;
-  app_state->drinks_scroll_offset_px = 0;
-  app_state->shots_scroll_offset_px = 0;
-  app_state->settings_scroll_offset_px = 0;
-  app_state->mapping_scroll_offset_px = 0;
+  app_state->selected_drink_index = -1;
+  app_state->selected_shot = INGREDIENT_GIN;
+  app_state->selected_is_shot = false;
+  app_state->selected_main_ml = 0;
   snprintf(app_state->status_line, sizeof(app_state->status_line), "Booting UI refactor");
 }
 
@@ -316,43 +366,69 @@ void tipsy_app_activate_main_menu(TipsyAppState *app_state, uint8_t menu_index) 
 }
 
 void tipsy_app_activate_drinks_item(TipsyAppState *app_state, size_t item_index) {
-  MenuListItem items[NUM_DRINKS + 1];
-  const size_t item_count = tipsy_app_build_drinks_items(items, NUM_DRINKS + 1);
+  size_t count = 0;
 
-  if (app_state == NULL || item_index >= item_count) {
+  if (app_state == NULL) {
     return;
   }
 
-  if (items[item_index].is_back) {
+  for (size_t i = 0; i < NUM_DRINKS; ++i) {
+    if (!drink_is_available(&drinks[i])) {
+      continue;
+    }
+
+    if (count == item_index) {
+      app_state->selected_drink_index = (int8_t)i;
+      app_state->selected_is_shot = false;
+      app_state->selected_main_ml =
+          normalize_main_spirit_ml(drinks[i].default_main_spirit_ml);
+      app_state->current_screen = UI_REFACTOR_SCREEN_DETAIL;
+      snprintf(app_state->status_line, sizeof(app_state->status_line),
+               "%s selected", drinks[i].name);
+      return;
+    }
+    ++count;
+  }
+
+  if (count == item_index) {
     app_state->current_screen = UI_REFACTOR_SCREEN_MAIN_MENU;
     app_state->drinks_scroll_offset_px = 0;
     snprintf(app_state->status_line, sizeof(app_state->status_line),
              "Returned to main menu");
-    return;
   }
-
-  snprintf(app_state->status_line, sizeof(app_state->status_line),
-           "Drink selected: %s", items[item_index].label);
 }
 
 void tipsy_app_activate_shots_item(TipsyAppState *app_state, size_t item_index) {
-  MenuListItem items[NUM_INGREDIENTS + 1];
-  const size_t item_count = tipsy_app_build_shots_items(items, NUM_INGREDIENTS + 1);
+  size_t count = 0;
 
-  if (app_state == NULL || item_index >= item_count) {
+  if (app_state == NULL) {
     return;
   }
 
-  if (items[item_index].is_back) {
+  for (int i = 0; i < NUM_INGREDIENTS; ++i) {
+    if (!shot_is_available((IngredientId)i)) {
+      continue;
+    }
+
+    if (count == item_index) {
+      app_state->selected_drink_index = -1;
+      app_state->selected_shot = (IngredientId)i;
+      app_state->selected_is_shot = true;
+      app_state->selected_main_ml = 40;
+      app_state->current_screen = UI_REFACTOR_SCREEN_DETAIL;
+      snprintf(app_state->status_line, sizeof(app_state->status_line),
+               "%s selected", tipsy_get_shot_label((IngredientId)i));
+      return;
+    }
+    ++count;
+  }
+
+  if (count == item_index) {
     app_state->current_screen = UI_REFACTOR_SCREEN_MAIN_MENU;
     app_state->shots_scroll_offset_px = 0;
     snprintf(app_state->status_line, sizeof(app_state->status_line),
              "Returned to main menu");
-    return;
   }
-
-  snprintf(app_state->status_line, sizeof(app_state->status_line),
-           "Shot selected: %s", items[item_index].label);
 }
 
 void tipsy_app_activate_settings_item(TipsyAppState *app_state, size_t item_index) {
@@ -401,4 +477,81 @@ void tipsy_app_activate_mapping_item(TipsyAppState *app_state, size_t item_index
            "Pump %d -> %s",
            (int)app_state->selected_settings_pump + 1,
            tipsy_get_ingredient_name(items[item_index].ingredient_id));
+}
+
+void tipsy_app_select_ml(TipsyAppState *app_state, uint16_t ml) {
+  if (app_state == NULL || app_state->current_screen != UI_REFACTOR_SCREEN_DETAIL) {
+    return;
+  }
+  if (ml != 40 && ml != 60 && ml != 80) {
+    return;
+  }
+
+  app_state->selected_main_ml = ml;
+  snprintf(app_state->status_line, sizeof(app_state->status_line),
+           "%s %u ml", tipsy_app_get_selected_label(app_state), (unsigned int)ml);
+}
+
+void tipsy_app_start_pour(TipsyAppState *app_state, uint32_t now_ms) {
+  if (app_state == NULL || app_state->current_screen != UI_REFACTOR_SCREEN_DETAIL) {
+    return;
+  }
+  if (app_state->selected_main_ml == 0) {
+    return;
+  }
+
+  app_state->current_screen = UI_REFACTOR_SCREEN_POURING;
+  app_state->pour_started_ms = now_ms;
+  app_state->pour_duration_ms = calculate_pour_time_ms(app_state->selected_main_ml);
+  app_state->last_pour_progress_px = 0;
+  app_state->pour_complete_logged = false;
+  snprintf(app_state->status_line, sizeof(app_state->status_line),
+           "Pouring %s", tipsy_app_get_selected_label(app_state));
+}
+
+void tipsy_app_back_from_detail(TipsyAppState *app_state) {
+  if (app_state == NULL || app_state->current_screen != UI_REFACTOR_SCREEN_DETAIL) {
+    return;
+  }
+
+  app_state->current_screen =
+      app_state->selected_is_shot ? UI_REFACTOR_SCREEN_SHOTS_LIST
+                                  : UI_REFACTOR_SCREEN_DRINKS_LIST;
+  snprintf(app_state->status_line, sizeof(app_state->status_line),
+           "Returned to %s list", app_state->selected_is_shot ? "shots" : "drinks");
+}
+
+bool tipsy_app_update(TipsyAppState *app_state, uint32_t now_ms) {
+  uint32_t elapsed_ms = 0;
+  uint32_t duration_ms = 1;
+  uint16_t progress_px = 0;
+
+  if (app_state == NULL || app_state->current_screen != UI_REFACTOR_SCREEN_POURING) {
+    return false;
+  }
+
+  elapsed_ms = now_ms - app_state->pour_started_ms;
+  duration_ms = app_state->pour_duration_ms > 0 ? app_state->pour_duration_ms : 1;
+  progress_px = (uint16_t)((elapsed_ms >= duration_ms)
+                               ? 280
+                               : ((elapsed_ms * 280u) / duration_ms));
+
+  if (progress_px != app_state->last_pour_progress_px) {
+    app_state->last_pour_progress_px = progress_px;
+    if (elapsed_ms < duration_ms) {
+      snprintf(app_state->status_line, sizeof(app_state->status_line),
+               "Pouring %s", tipsy_app_get_selected_label(app_state));
+    }
+    return true;
+  }
+
+  if (elapsed_ms >= duration_ms && !app_state->pour_complete_logged) {
+    app_state->pour_complete_logged = true;
+    app_state->current_screen = UI_REFACTOR_SCREEN_MAIN_MENU;
+    snprintf(app_state->status_line, sizeof(app_state->status_line),
+             "%s ready", tipsy_app_get_selected_label(app_state));
+    return true;
+  }
+
+  return false;
 }
