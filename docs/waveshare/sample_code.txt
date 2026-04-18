@@ -1,0 +1,74 @@
+Official sample-code guidance for Waveshare RP2350-Touch-LCD-3.5
+
+Use only the files in docs/waveshare as reference material.
+Do not inspect unrelated folders unless explicitly asked.
+
+Context:
+We already have a working minimal RP2350 bring-up:
+- build works
+- UF2 flashing works
+- USB serial heartbeat works
+
+Your task is NOT to guess hardware details.
+Use these reference files only to extract VERIFIED facts.
+
+Files currently available:
+- docs/waveshare/LVGL_example.c
+- docs/waveshare/LCD_3in5.c
+- docs/waveshare/LCD_3in5_test.c
+- docs/waveshare/lv_conf.h
+- docs/waveshare/waveshare_rp2350_touch_lcd_3.5.h
+- docs/waveshare/README.md
+
+Already verified:
+- display resolution: 320x480
+- display controller: ST7796
+- touch controller: FT6336
+- touch uses I2C
+- official Waveshare docs describe the display as SPI-connected
+- the LVGL example uses DMA to transfer display data to SPI
+- the LVGL example uses Touch_INT_PIN and FT6336U_Get_Point()
+- the LCD driver contains the display init sequence
+- the LCD test initializes the display in vertical mode and enables backlight with DEV_SET_PWM(100)
+
+Important limitation:
+The exact board pin-definition file is still missing.
+That means the exact GPIO numbers for LCD and touch control signals are not fully verified yet.
+
+Primary goals:
+1. identify the exact display bus used in the official example code
+2. identify the exact minimal display init path from the official code
+3. identify reset / dc / cs / backlight handling
+4. identify what is VERIFIED and what is still UNVERIFIED
+5. identify the single most important missing file needed next
+6. do NOT implement touch yet
+
+What you must extract:
+- exact display controller name
+- exact display bus used by the example code
+- exact touch controller name
+- whether LVGL uses raw Pico SDK SPI, DMA, or a wrapper layer
+- where the display init sequence lives
+- where reset / dc / cs handling lives
+- where touch interrupt handling lives
+- whether exact GPIO mappings are present in the currently added files
+- what file is still required to prove the exact GPIO mapping
+
+Rules:
+- do not guess
+- do not invent pin mappings
+- do not assume missing symbols
+- do not use generic RP2350 examples as proof for this board
+- preserve the current USB serial heartbeat behavior in our code
+- do not add touch yet
+- do not add UI architecture yet
+- do not add pumps, storage, multicore, PIO, or DMA unless already proven necessary
+- keep the next step to the smallest possible verified display-only bring-up
+
+Expected response format:
+1. Verified hardware facts
+2. Which local reference files prove each fact
+3. What remains uncertain
+4. The smallest display-only bring-up diff for our current project
+5. The exact next missing reference file to add
+6. Wait for approval before applying changes
