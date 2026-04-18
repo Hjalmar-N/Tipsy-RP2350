@@ -66,6 +66,11 @@ int main(void) {
       touch_scrolled = false;
     }
 
+    if (tipsy_app_update(&app_state,
+                         (uint32_t)to_ms_since_boot(get_absolute_time()))) {
+      tipsy_ui_refactor_render(&app_state);
+    }
+
     last_pressed = pressed_now;
     sleep_ms(15);
   }
