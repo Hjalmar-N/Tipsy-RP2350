@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "pico/stdlib.h"
 #include "tipsy_hal.h"
 
 typedef struct {
@@ -16,25 +15,12 @@ typedef struct {
 static void draw_header(const char *title);
 static void render_settings_scrollbar(size_t item_count,
                                       uint16_t scroll_offset_px);
-static void render_detail_screen(const TipsyAppState *app_state);
-static void render_pouring_screen(const TipsyAppState *app_state);
 
 static const UiButton main_menu_buttons[3] = {
     {{24, 96, 272, 78}, TIPSY_COLOR_BLUE, TIPSY_COLOR_WHITE, "DRINKS"},
     {{24, 192, 272, 78}, TIPSY_COLOR_GREEN, TIPSY_COLOR_WHITE, "SHOTS"},
     {{24, 288, 272, 78}, TIPSY_COLOR_LIGHTGRAY, TIPSY_COLOR_BLACK, "SETTINGS"},
 };
-
-static const UiButton detail_ml_buttons[3] = {
-    {{20, 150, 80, 70}, TIPSY_COLOR_BLUE, TIPSY_COLOR_WHITE, "40"},
-    {{120, 150, 80, 70}, TIPSY_COLOR_BLUE, TIPSY_COLOR_WHITE, "60"},
-    {{220, 150, 80, 70}, TIPSY_COLOR_BLUE, TIPSY_COLOR_WHITE, "80"},
-};
-
-static const UiButton detail_pour_button = {
-    {20, 260, 180, 80}, TIPSY_COLOR_GREEN, TIPSY_COLOR_BLACK, "POUR"};
-static const UiButton detail_back_button = {
-    {220, 260, 80, 80}, TIPSY_COLOR_LIGHTGRAY, TIPSY_COLOR_BLACK, "BACK"};
 
 #define SETTINGS_ITEM_CAPACITY (NUM_PUMPS + 1)
 #define SETTINGS_LIST_X 18
@@ -254,7 +240,7 @@ static void render_drinks_screen(const TipsyAppState *app_state) {
   const size_t item_count =
       tipsy_app_build_drinks_items(items, DRINKS_ITEM_CAPACITY);
 
-  render_generic_menu_list("DRINKS", "Tap item to open details",
+  render_generic_menu_list("DRINKS", "Tap item to log selection",
                            "Back returns to main menu", items, item_count,
                            app_state->drinks_scroll_offset_px, TIPSY_COLOR_BLUE);
   draw_footer(app_state->status_line);
@@ -265,7 +251,7 @@ static void render_shots_screen(const TipsyAppState *app_state) {
   const size_t item_count =
       tipsy_app_build_shots_items(items, SHOTS_ITEM_CAPACITY);
 
-  render_generic_menu_list("SHOTS", "Tap item to open details",
+  render_generic_menu_list("SHOTS", "Tap item to log selection",
                            "Back returns to main menu", items, item_count,
                            app_state->shots_scroll_offset_px, TIPSY_COLOR_GREEN);
   draw_footer(app_state->status_line);
@@ -323,55 +309,6 @@ static void render_mapping_screen(const TipsyAppState *app_state) {
   draw_footer(app_state->status_line);
 }
 
-static void render_detail_screen(const TipsyAppState *app_state) {
-  const char *label = tipsy_app_get_selected_label(app_state);
-  const uint16_t selected_ml = tipsy_app_get_selected_main_ml(app_state);
-
-  tipsy_display_fill_screen(TIPSY_COLOR_BLACK);
-  draw_header("DETAIL");
-  tipsy_display_draw_text_5x7(20, 90, label, TIPSY_COLOR_WHITE, 3);
-  tipsy_display_draw_text_5x7(20, 122, "Choose spirit ml", TIPSY_COLOR_LIGHTGRAY, 1);
-
-  for (size_t i = 0; i < 3; ++i) {
-    const uint16_t button_ml = (i == 0) ? 40 : ((i == 1) ? 60 : 80);
-    draw_button(&detail_ml_buttons[i], selected_ml == button_ml);
-  }
-
-  draw_button(&detail_pour_button, false);
-  draw_button(&detail_back_button, false);
-  draw_footer(app_state->status_line);
-}
-
-static void draw_pouring_progress_bar(uint16_t fill_width) {
-  const uint16_t bar_x = 20;
-  const uint16_t bar_y = 220;
-  const uint16_t bar_w = 280;
-  const uint16_t bar_h = 40;
-
-  tipsy_display_fill_rect(bar_x, bar_y, bar_w, bar_h, TIPSY_COLOR_LIGHTGRAY);
-  if (fill_width > 0) {
-    if (fill_width > bar_w) {
-      fill_width = bar_w;
-    }
-    tipsy_display_fill_rect(bar_x, bar_y, fill_width, bar_h, TIPSY_COLOR_GREEN);
-  }
-}
-
-static void render_pouring_screen(const TipsyAppState *app_state) {
-  char ml_text[16];
-
-  snprintf(ml_text, sizeof(ml_text), "%u ml",
-           (unsigned int)tipsy_app_get_selected_main_ml(app_state));
-
-  tipsy_display_fill_screen(TIPSY_COLOR_BLACK);
-  draw_header("POURING");
-  tipsy_display_draw_text_5x7(20, 95, tipsy_app_get_selected_label(app_state),
-                              TIPSY_COLOR_WHITE, 3);
-  tipsy_display_draw_text_5x7(20, 155, ml_text, TIPSY_COLOR_WHITE, 2);
-  draw_pouring_progress_bar(tipsy_app_get_pour_progress_px(app_state));
-  draw_footer(app_state->status_line);
-}
-
 void tipsy_ui_refactor_render(const TipsyAppState *app_state) {
   if (app_state == NULL) {
     return;
@@ -387,12 +324,8 @@ void tipsy_ui_refactor_render(const TipsyAppState *app_state) {
     render_shots_screen(app_state);
   } else if (app_state->current_screen == UI_REFACTOR_SCREEN_SETTINGS_LIST) {
     render_settings_screen(app_state);
-  } else if (app_state->current_screen == UI_REFACTOR_SCREEN_SETTINGS_MAPPING) {
-    render_mapping_screen(app_state);
-  } else if (app_state->current_screen == UI_REFACTOR_SCREEN_DETAIL) {
-    render_detail_screen(app_state);
   } else {
-    render_pouring_screen(app_state);
+    render_mapping_screen(app_state);
   }
 
   tipsy_display_present();
@@ -492,29 +425,6 @@ bool tipsy_ui_refactor_handle_release(TipsyAppState *app_state, uint16_t x,
       tipsy_app_activate_main_menu(app_state, (uint8_t)hit_index);
       return true;
     }
-    return false;
-  }
-
-  if (app_state->current_screen == UI_REFACTOR_SCREEN_DETAIL) {
-    for (int i = 0; i < 3; ++i) {
-      if (tipsy_rect_contains(&detail_ml_buttons[i].rect, x, y)) {
-        tipsy_app_select_ml(app_state, (i == 0) ? 40 : ((i == 1) ? 60 : 80));
-        return true;
-      }
-    }
-    if (tipsy_rect_contains(&detail_pour_button.rect, x, y)) {
-      tipsy_app_start_pour(app_state,
-                           (uint32_t)to_ms_since_boot(get_absolute_time()));
-      return true;
-    }
-    if (tipsy_rect_contains(&detail_back_button.rect, x, y)) {
-      tipsy_app_back_from_detail(app_state);
-      return true;
-    }
-    return false;
-  }
-
-  if (app_state->current_screen == UI_REFACTOR_SCREEN_POURING) {
     return false;
   }
 
