@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "pico/stdlib.h"
 #include "tipsy_hal.h"
 
 typedef struct {
@@ -502,7 +503,8 @@ bool tipsy_ui_refactor_handle_release(TipsyAppState *app_state, uint16_t x,
       }
     }
     if (tipsy_rect_contains(&detail_pour_button.rect, x, y)) {
-      tipsy_app_start_pour(app_state, 0);
+      tipsy_app_start_pour(app_state,
+                           (uint32_t)to_ms_since_boot(get_absolute_time()));
       return true;
     }
     if (tipsy_rect_contains(&detail_back_button.rect, x, y)) {
