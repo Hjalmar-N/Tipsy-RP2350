@@ -35,7 +35,9 @@ typedef enum {
   UI_REFACTOR_SCREEN_DRINKS_LIST,
   UI_REFACTOR_SCREEN_SHOTS_LIST,
   UI_REFACTOR_SCREEN_SETTINGS_LIST,
-  UI_REFACTOR_SCREEN_SETTINGS_MAPPING
+  UI_REFACTOR_SCREEN_SETTINGS_MAPPING,
+  UI_REFACTOR_SCREEN_DETAIL,
+  UI_REFACTOR_SCREEN_POURING
 } UiRefactorScreen;
 
 typedef enum {
@@ -91,6 +93,14 @@ typedef struct {
   uint16_t shots_scroll_offset_px;
   uint16_t settings_scroll_offset_px;
   uint16_t mapping_scroll_offset_px;
+  int8_t selected_drink_index;
+  IngredientId selected_shot;
+  bool selected_is_shot;
+  uint16_t selected_main_ml;
+  uint32_t pour_started_ms;
+  uint32_t pour_duration_ms;
+  uint16_t last_pour_progress_px;
+  bool pour_complete_logged;
   char status_line[48];
 } TipsyAppState;
 
@@ -101,6 +111,10 @@ void tipsy_app_activate_drinks_item(TipsyAppState *app_state, size_t item_index)
 void tipsy_app_activate_shots_item(TipsyAppState *app_state, size_t item_index);
 void tipsy_app_activate_settings_item(TipsyAppState *app_state, size_t item_index);
 void tipsy_app_activate_mapping_item(TipsyAppState *app_state, size_t item_index);
+void tipsy_app_select_ml(TipsyAppState *app_state, uint16_t ml);
+void tipsy_app_start_pour(TipsyAppState *app_state, uint32_t now_ms);
+void tipsy_app_back_from_detail(TipsyAppState *app_state);
+bool tipsy_app_update(TipsyAppState *app_state, uint32_t now_ms);
 
 size_t tipsy_app_build_drinks_items(MenuListItem *out, size_t max_items);
 size_t tipsy_app_build_shots_items(MenuListItem *out, size_t max_items);
@@ -112,5 +126,8 @@ const char *tipsy_get_shot_label(IngredientId ingredient_id);
 uint32_t tipsy_get_pump_calibration_ms_per_ml(PumpId pump_id);
 const Pump *tipsy_get_pumps(void);
 size_t tipsy_get_pump_count(void);
+const char *tipsy_app_get_selected_label(const TipsyAppState *app_state);
+uint16_t tipsy_app_get_selected_main_ml(const TipsyAppState *app_state);
+uint16_t tipsy_app_get_pour_progress_px(const TipsyAppState *app_state);
 
 #endif
